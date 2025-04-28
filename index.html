@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Administração - Overtuning</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary: #e74c3c;
+            --secondary: #34495e;
+            --light: #ecf0f1;
+            --dark: #2c3e50;
+            --success: #27ae60;
+            --warning: #f39c12;
+            --danger: #c0392b;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f5f5;
+            color: var(--dark);
+        }
+        
+        header {
+            background-color: var(--dark);
+            color: white;
+            padding: 1rem 0;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+        
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: white;
+            text-decoration: none;
+        }
+        
+        .logo span {
+            color: var(--primary);
+        }
+        
+        .section {
+            padding: 2rem 0;
+        }
+        
+        .section-title {
+            font-size: 1.8rem;
+            margin-bottom: 1.5rem;
+            color: var(--secondary);
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 2rem;
+        }
+        
+        .tab {
+            padding: 0.8rem 1.5rem;
+            cursor: pointer;
+            font-weight: 500;
+            border-bottom: 3px solid transparent;
+        }
+        
+        .tab.active {
+            border-bottom: 3px solid var(--primary);
+            color: var(--primary);
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        
+        textarea.form-control {
+            min-height: 150px;
+            resize: vertical;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 0.8rem 1.5rem;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--danger);
+        }
+        
+        .btn-success {
+            background-color: var(--success);
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background-color: #219653;
+        }
+        
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background-color: #a12718;
+        }
+        
+        .alert {
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1.5rem;
+            display: none;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-danger {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .form-check {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .form-check-input {
+            margin-right: 0.5rem;
+            width: 18px;
+            height: 18px;
+        }
+        
+        .product-list {
+            margin-top: 2rem;
+        }
+        
+        .product-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .product-item:last-child {
+            border-bottom: none;
+        }
+        
+        .product-info {
+            flex: 1;
+        }
+        
+        .product-name {
+            font-weight: 500;
+            margin-bottom: 0.3rem;
+        }
+        
+        .product-details {
+            color: #777;
+            font-size: 0.9rem;
+        }
+        
+        .product-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .btn-sm {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.9rem;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: var(--primary);
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .login-container {
+            max-width: 400px;
+            margin: 3rem auto;
+        }
+
+        /* Estilo para o monitor em tempo real */
+        #realtime-logs {
+            height: 300px;
+            overflow-y: auto;
+            background-color: #f5f5f5;
+            padding: 1rem;
+            border-radius: 4px;
+            font-family: monospace;
+            border: 1px solid #ddd;
+        }
+
+        .log-entry {
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+        }
+
+        .log-entry.success {
+            background-color: rgba(39, 174, 96, 0.1);
+            border-left: 3px solid var(--success);
+        }
+
+        .log-entry.error {
+            background-color: rgba(192, 57, 43, 0.1);
+            border-left: 3px solid var(--danger);
+        }
+
+        .log-entry.info {
+            background-color: rgba(52, 152, 219, 0.1);
+            border-left: 3px solid #3498db;
+        }
+
+        .log-timestamp {
+            font-size: 0.8rem;
+            color: #777;
+            margin-right: 0.5rem;
+        }
+
+        /* Estilo para o formulário JSON */
+        #jsonEditor {
+            width: 100%;
+            min-height: 200px;
+            font-family: monospace;
+            padding: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <nav class="navbar">
+                <a href="#" class="logo">Over<span>tuning</span> Admin</a>
+                <div id="userStatus">
+                    <span id="userEmail"></span>
+                    <button id="logoutBtn" class="btn btn-danger" style="display: none;">Sair</button>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Login Form -->
+        <div id="loginSection" class="login-container">
+            <div class="card">
+                <h2 class="section-title">Login</h2>
+                <div id="loginAlert" class="alert"></div>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" id="email" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password" class="form-label">Senha</label>
+                        <input type="password" id="password" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Entrar</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Admin Dashboard -->
+        <div id="adminSection" class="section" style="display: none;">
+            <div class="tabs">
+                <div class="tab active" data-tab="produtos">Produtos</div>
+                <div class="tab" data-tab="mensagens">Mensagens</div>
+                <div class="tab" data-tab="monitor">Monitor</div>
+            </div>
+
+            <!-- Produtos Tab -->
+            <div id="produtosTab" class="tab-content active">
+                <div class="card">
+                    <h2 class="section-title">Adicionar Novo Produto</h2>
+                    <div id="produtoAlert" class="alert"></div>
+                    <form id="produtoForm">
+                        <div class="form-group">
+                            <label for="nome" class="form-label">Nome do Produto</label>
+                            <input type="text" id="nome" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="descricao" class="form-label">Descrição Curta</label>
+                            <input type="text" id="descricao" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="descricao_longa" class="form-label">Descrição Longa</label>
+                            <textarea id="descricao_longa" class="form-control"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="preco" class="form-label">Preço (R$)</label>
+                            <input type="number" id="preco" class="form-control" step="0.01" min="0" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="imagem_url" class="form-label">URL da Imagem</label>
+                            <input type="url" id="imagem_url" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="categoria" class="form-label">Categoria</label>
+                            <input type="text" id="categoria" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="estoque" class="form-label">Quantidade em Estoque</label>
+                            <input type="number" id="estoque" class="form-control" min="0" value="0" required>
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" id="destaque" class="form-check-input">
+                            <label for="destaque" class="form-label">Produto em Destaque</label>
+                        </div>
+                        <div class="form-group">
+                            <label for="jsonEditor" class="form-label">Especificações (JSON)</label>
+                            <textarea id="jsonEditor" class="form-control" placeholder='{
+  "Tipo": "Universal",
+  "Material": "Aço inox",
+  "Garantia": "1 ano"
+}'></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-success">Adicionar Produto</button>
+                    </form>
+                </div>
+
+                <div class="card product-list">
+                    <h2 class="section-title">Lista de Produtos</h2>
+                    <div id="productListLoading" class="loading">
+                        <div class="spinner"></div>
+                        <p>Carregando produtos...</p>
+                    </div>
+                    <div id="productList"></div>
+                </div>
+            </div>
+
+            <!-- Mensagens Tab -->
+            <div id="mensagensTab" class="tab-content">
+                <div class="card">
+                    <h2 class="section-title">Mensagens de Contato</h2>
+                    <div id="messageListLoading" class="loading">
+                        <div class="spinner"></div>
+                        <p>Carregando mensagens...</p>
+                    </div>
+                    <div id="messageList"></div>
+                </div>
+            </div>
+
+            <!-- Monitor Tab -->
+            <div id="monitorTab" class="tab-content">
+                <div class="card">
+                    <h2 class="section-title">Monitor em Tempo Real</h2>
+                    <div id="realtime-logs"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Inicialização do Supabase
+            const supabaseUrl = 'https://hpyzsyxtedxpcrcdbkft.supabase.co';
+            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhweXpzeXh0ZWR4cGNyY2Ria2Z0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODY3NjcsImV4cCI6MjA2MTE2Mjc2N30.SpE5L0qHhJBuxknbgCw18TakF1M0ZHW12thZZGAhRr0';
+            const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+            // Elementos DOM
+            const loginSection = document.getElementById('loginSection');
+            const adminSection = document.getElementById('adminSection');
+            const loginForm = document.getElementById('loginForm');
+            const loginAlert = document.getElementById('loginAlert');
+            const userEmail = document.getElementById('userEmail');
+            const logoutBtn = document.getElementById('logoutBtn');
+            const produtoForm = document.getElementById('produtoForm');
+            const produtoAlert = document.getElementById('produtoAlert');
+            const productList = document.getElementById('productList');
+            const productListLoading = document.getElementById('productListLoading');
+            const messageList = document.getElementById('messageList');
+            const messageListLoading = document.getElementById('messageListLoading');
+            const tabs = document.querySelectorAll('.tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+            const realtimeLogs = document.getElementById('realtime-logs');
+
+            // Função para adicionar logs ao monitor
+            function addLog(message, type = 'info') {
+                const now = new Date();
+                const timestamp = now.toLocaleTimeString();
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry ${type}`;
+                logEntry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> ${message}`;
+                realtimeLogs.appendChild(logEntry);
+                realtimeLogs.scrollTop = realtimeLogs.scrollHeight; // Auto-scroll para o novo log
+            }
+
+            // Verificar se o usuário está logado
+            async function checkSession() {
+                try {
+                    const { data, error } = await supabase.auth.getSession();
+                    
+                    if (data && data.session) {
+                        // Usuário está logado
+                        loginSection.style.display = 'none';
+                        adminSection.style.display = 'block';
+                        userEmail.textContent = data.session.user.email;
+                        logoutBtn.style.display = 'inline-block';
+                        
+                        // Carregar dados
+                        loadProducts();
+                        loadMessages();
+                        
+                        addLog('Sessão iniciada como ' + data.session.user.email, 'success');
+                    } else {
+                        // Usuário não está logado
+                        loginSection.style.display = 'block';
+                        adminSection.style.display = 'none';
+                        logoutBtn.style.display = 'none';
+                    }
+                } catch (err) {
+                    console.error("Erro ao verificar sessão:", err);
+                    addLog('Erro ao verificar sessão: ' + err.message, 'error');
+                }
+            }
+
+            // Login
+            loginForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                
+                try {
+                    const { data, error } = await supabase.auth.signInWithPassword({
+                        email: email,
+                        password: password
+                    });
+                    
+                    if (error) throw error;
+                    
+                    // Login bem-sucedido
+                    loginAlert.className = 'alert alert-success';
+                    loginAlert.textContent = 'Login realizado com sucesso!';
+                    loginAlert.style.display = 'block';
+                    
+                    // Atualizar UI
+                    setTimeout(() => {
+                        checkSession();
+                        loginAlert.style.display = 'none';
+                    }, 1000);
+                    
+                    addLog('Login realizado com sucesso como ' + email, 'success');
+                } catch (error) {
+                    console.error('Erro de login:', error);
+                    loginAlert.className = 'alert alert-danger';
+                    loginAlert.textContent = 'Erro ao fazer login: ' + error.message;
+                    loginAlert.style.display = 'block';
+                    
+                    addLog('Falha no login: ' + error.message, 'error');
+                }
+            });
+
+            // Logout
+            logoutBtn.addEventListener('click', async function() {
+                const { error } = await supabase.auth.signOut();
+                
+                if (error) {
+                    console.error('Erro ao fazer logout:', error);
+                    addLog('Erro ao fazer logout: ' + error.message, 'error');
+                } else {
+                    addLog('Logout realizado com sucesso', 'info');
+                    checkSession();
+                }
+            });
+
+            // Adicionar produto
+            produtoForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                try {
+                    // Validar JSON das especificações
+                    const jsonEditorValue = document.getElementById('jsonEditor').value;
+                    let especificacoes = null;
+                    
+                    if (jsonEditorValue.trim()) {
+                        try {
+                            especificacoes = JSON.parse(jsonEditorValue);
+                        } catch (jsonError) {
+                            throw new Error('Formato JSON inválido para especificações');
+                        }
+                    }
+                    
+                    // Criar objeto do produto
+                    const produto = {
+                        nome: document.getElementById('nome').value,
+                        descricao: document.getElementById('descricao').value,
+                        descricao_longa: document.getElementById('descricao_longa').value,
+                        preco: parseFloat(document.getElementById('preco').value),
+                        imagem_url: document.getElementById('imagem_url').value,
+                        categoria: document.getElementById('categoria').value,
+                        estoque: parseInt(document.getElementById('estoque').value),
+                        destaque: document.getElementById('destaque').checked,
+                        especificacoes: especificacoes
+                    };
+                    
+                    // Enviar para o Supabase
+                    const { data, error } = await supabase
+                        .from('produtos')
+                        .insert([produto]);
+                    
+                    if (error) throw error;
+                    
+                    // Limpar formulário
+                    produtoForm.reset();
+                    document.getElementById('jsonEditor').value = '';
+                    
+                    // Exibir mensagem de sucesso
+                    produtoAlert.className = 'alert alert-success';
+                    produtoAlert.textContent = 'Produto adicionado com sucesso!';
+                    produtoAlert.style.display = 'block';
+                    
+                    // Recarregar lista de produtos
+                    loadProducts();
+                    
+                    addLog('Produto adicionado: ' + produto.nome, 'success');
+                    
+                    // Esconder mensagem após 3 segundos
+                    setTimeout(() => {
+                        produtoAlert.style.display = 'none';
+                    }, 3000);
+                } catch (error) {
+                    console.error('Erro ao adicionar produto:', error);
+                    produtoAlert.className = 'alert alert-danger';
+                    produtoAlert.textContent = 'Erro ao adicionar produto: ' + error.message;
+                    produtoAlert.style.display = 'block';
+                    
+                    addLog('Erro ao adicionar produto: ' + error.message, 'error');
+                }
+            });
+
+            // Carregar produtos
+            async function loadProducts() {
+                productListLoading.style.display = 'block';
+                productList.innerHTML = '';
+                
+                try {
+                    const { data, error } = await supabase
+                        .from('produtos')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+                    
+                    if (error) throw error;
+                    
+                    if (data.length === 0) {
+                        productList.innerHTML = '<p>Nenhum produto cadastrado.</p>';
+                    } else {
+                        data.forEach(produto => {
+                            const productItem = document.createElement('div');
+                            productItem.className = 'product-item';
+                            productItem.innerHTML = `
+                                <div class="product-info">
+                                    <div class="product-name">${produto.nome}</div>
+                                    <div class="product-details">
+                                        R$ ${produto.preco.toFixed(2)} | Estoque: ${produto.estoque} | 
+                                        ${produto.destaque ? '<span style="color: var(--success)">Destaque</span>' : ''}
+                                    </div>
+                                </div>
+                                <div class="product-actions">
+                                    <button class="btn btn-sm btn-primary edit-product" data-id="${produto.id}">Editar</button>
+                                    <button class="btn btn-sm btn-danger delete-product" data-id="${produto.id}">Excluir</button>
+                                </div>
+                            `;
+                            productList.appendChild(productItem);
+                            
+                            // Adicionar event listeners
+                            productItem.querySelector('.delete-product').addEventListener('click', function() {
+                                deleteProduct(produto.id, produto.nome);
+                            });
+                            
+                            productItem.querySelector('.edit-product').addEventListener('click', function() {
+                                // Implementar edição de produto
+                                alert('Funcionalidade de edição em desenvolvimento!');
+                            });
+                        });
+                    }
+                    
+                    addLog('Produtos carregados: ' + (data ? data.length : 0) + ' itens', 'info');
+                } catch (error) {
+                    console.error('Erro ao carregar produtos:', error);
+                    productList.innerHTML = `<p style="color: var(--danger)">Erro ao carregar produtos: ${error.message}</p>`;
+                    addLog('Erro ao carregar produtos: ' + error.message, 'error');
+                } finally {
+                    productListLoading.style.display = 'none';
+                }
+            }
+
+            // Excluir produto
+            async function deleteProduct(id, nome) {
+                if (confirm(`Tem certeza que deseja excluir o produto "${nome}"?`)) {
+                    try {
+                        const { error } = await supabase
+                            .from('produtos')
+                            .delete()
+                            .eq('id', id);
+                        
+                        if (error) throw error;
+                        
+                        // Recarregar lista de produtos
+                        loadProducts();
+                        
+                        addLog('Produto excluído: ' + nome, 'success');
+                    } catch (error) {
+                        console.error('Erro ao excluir produto:', error);
+                        alert('Erro ao excluir produto: ' + error.message);
+                        addLog('Erro ao excluir produto: ' + error.message, 'error');
+                    }
+                }
+            }
+
+            // Carregar mensagens de contato
+            async function loadMessages() {
+                messageListLoading.style.display = 'block';
+                messageList.innerHTML = '';
+                
+                try {
+                    const { data, error } = await supabase
+                        .from('mensagens')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+                    
+                    if (error) throw error;
+                    
+                    if (data.length === 0) {
+                        messageList.innerHTML = '<p>Nenhuma mensagem recebida.</p>';
+                    } else {
+                        data.forEach(mensagem => {
+                            const messageItem = document.createElement('div');
+                            messageItem.className = 'card';
+                            
+                            const date = new Date(mensagem.created_at);
+                            const formattedDate = date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR');
+                            
+                            messageItem.innerHTML = `
+                                <h3>${mensagem.nome} <small>(${mensagem.email})</small></h3>
+                                <p><strong>Recebido em:</strong> ${formattedDate}</p>
+                                <p><strong>Assunto:</strong> ${mensagem.assunto || 'Não especificado'}</p>
+                                <p>${mensagem.mensagem}</p>
+                                <button class="btn btn-sm btn-danger delete-message" data-id="${mensagem.id}">Excluir</button>
+                            `;
+                            messageList.appendChild(messageItem);
+                            
+                            // Adicionar event listener
+                            messageItem.querySelector('.delete-message').addEventListener('click', function() {
+                                deleteMessage(mensagem.id, mensagem.nome);
+                            });
+                        });
+                    }
+                    
+                    addLog('Mensagens carregadas: ' + (data ? data.length : 0) + ' itens', 'info');
+                } catch (error) {
+                    console.error('Erro ao carregar mensagens:', error);
+                    messageList.innerHTML = `<p style="color: var(--danger)">Erro ao carregar mensagens: ${error.message}</p>`;
+                    addLog('Erro ao carregar mensagens: ' + error.message, 'error');
+                } finally {
+                    messageListLoading.style.display = 'none';
+                }
+            }
+
+            // Excluir mensagem
+            async function deleteMessage(id, nome) {
+                if (confirm(`Tem certeza que deseja excluir a mensagem de "${nome}"?`)) {
+                    try {
+                        const { error } = await supabase
+                            .from('mensagens')
+                            .delete()
+                            .eq('id', id);
+                        
+                        if (error) throw error;
+                        
+                        // Recarregar lista de mensagens
+                        loadMessages();
+                        
+                        addLog('Mensagem excluída: ' + nome, 'success');
+                    } catch (error) {
+                        console.error('Erro ao excluir mensagem:', error);
+                        alert('Erro ao excluir mensagem: ' + error.message);
+                        addLog('Erro ao excluir mensagem: ' + error.message, 'error');
+                    }
+                }
+            }
+
+            // Sistema de abas
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // Remover classe ativa de todas as abas
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tabContents.forEach(c => c.classList.remove('active'));
+                    
+                    // Adicionar classe ativa na aba clicada
+                    this.classList.add('active');
+                    
+                    // Exibir conteúdo correspondente
+                    const tabName = this.getAttribute('data-tab');
+                    document.getElementById(tabName + 'Tab').classList.add('active');
+                    
+                    addLog('Navegação para a aba: ' + tabName, 'info');
+                });
+            });
+
+            // Inicializar
+            checkSession();
+            
+            // Corrigir problema do Supabase
+            if (typeof supabase === 'undefined') {
+                const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+                console.log("Supabase inicializado via window.supabase");
+                addLog('Supabase inicializado manualmente', 'info');
+            }
+            
+            addLog('Aplicação inicializada', 'info');
+        });
+    </script>
+</body>
+</html>
