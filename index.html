@@ -437,7 +437,7 @@
             // Inicialização do Supabase
             const supabaseUrl = 'https://hpyzsyxtedxpcrcdbkft.supabase.co';
             const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhweXpzeXh0ZWR4cGNyY2Ria2Z0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU1ODY3NjcsImV4cCI6MjA2MTE2Mjc2N30.SpE5L0qHhJBuxknbgCw18TakF1M0ZHW12thZZGAhRr0';
-            const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+            const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
             // Elementos DOM
             const loginSection = document.getElementById('loginSection');
@@ -467,13 +467,52 @@
                 realtimeLogs.scrollTop = realtimeLogs.scrollHeight; // Auto-scroll para o novo log
             }
 
+            // Verificar se o usuário é administrador
+            async function checkAdminAccess(email) {
+                try {
+                    const { data, error } = await supabase
+                        .from('administrators')
+                        .select('*')
+                        .eq('email', email)
+                        .single();
+                        
+                    if (error || !data) {
+                        addLog('Acesso negado: usuário não é administrador', 'error');
+                        return false;
+                    }
+                    
+                    addLog('Verificação de administrador: acesso concedido', 'success');
+                    return true;
+                } catch (err) {
+                    console.error("Erro ao verificar permissões de administrador:", err);
+                    addLog('Erro ao verificar permissões: ' + err.message, 'error');
+                    return false;
+                }
+            }
+
             // Verificar se o usuário está logado
             async function checkSession() {
                 try {
                     const { data, error } = await supabase.auth.getSession();
                     
                     if (data && data.session) {
-                        // Usuário está logado
+                        // Verificar se o usuário é administrador
+                        const isAdmin = await checkAdminAccess(data.session.user.email);
+                        
+                        if (!isAdmin) {
+                            // Não é administrador, fazer logout
+                            await supabase.auth.signOut();
+                            loginSection.style.display = 'block';
+                            adminSection.style.display = 'none';
+                            logoutBtn.style.display = 'none';
+                            
+                            loginAlert.className = 'alert alert-danger';
+                            loginAlert.textContent = 'Acesso negado: você não é um administrador.';
+                            loginAlert.style.display = 'block';
+                            return;
+                        }
+                        
+                        // Usuário é administrador
                         loginSection.style.display = 'none';
                         adminSection.style.display = 'block';
                         userEmail.textContent = data.session.user.email;
@@ -510,6 +549,17 @@
                     });
                     
                     if (error) throw error;
+                    
+                    // Verificar se é administrador antes de prosseguir
+                    const isAdmin = await checkAdminAccess(email);
+                    if (!isAdmin) {
+                        // Não é administrador, fazer logout
+                        await supabase.auth.signOut();
+                        loginAlert.className = 'alert alert-danger';
+                        loginAlert.textContent = 'Acesso negado: você não é um administrador.';
+                        loginAlert.style.display = 'block';
+                        return;
+                    }
                     
                     // Login bem-sucedido
                     loginAlert.className = 'alert alert-success';
@@ -620,7 +670,7 @@
                     const { data, error } = await supabase
                         .from('produtos')
                         .select('*')
-                        .order('created_at', { ascending: false });
+                        .order('data_criacao', { ascending: false });
                     
                     if (error) throw error;
                     
@@ -651,8 +701,7 @@
                             });
                             
                             productItem.querySelector('.edit-product').addEventListener('click', function() {
-                                // Implementar edição de produto
-                                alert('Funcionalidade de edição em desenvolvimento!');
+                                editProduct(produto);
                             });
                         });
                     }
@@ -667,131 +716,95 @@
                 }
             }
 
-            // Excluir produto
-            async function deleteProduct(id, nome) {
-                if (confirm(`Tem certeza que deseja excluir o produto "${nome}"?`)) {
-                    try {
-                        const { error } = await supabase
-                            .from('produtos')
-                            .delete()
-                            .eq('id', id);
-                        
-                        if (error) throw error;
-                        
-                        // Recarregar lista de produtos
-                        loadProducts();
-                        
-                        addLog('Produto excluído: ' + nome, 'success');
-                    } catch (error) {
-                        console.error('Erro ao excluir produto:', error);
-                        alert('Erro ao excluir produto: ' + error.message);
-                        addLog('Erro ao excluir produto: ' + error.message, 'error');
-                    }
-                }
-            }
-
-            // Carregar mensagens de contato
-            async function loadMessages() {
-                messageListLoading.style.display = 'block';
-                messageList.innerHTML = '';
+            // Função para editar produto
+            function editProduct(produto) {
+                // Preencher o formulário com os dados do produto
+                document.getElementById('nome').value = produto.nome;
+                document.getElementById('descricao').value = produto.descricao;
+                document.getElementById('descricao_longa').value = produto.descricao_longa || '';
+                document.getElementById('preco').value = produto.preco;
+                document.getElementById('imagem_url').value = produto.imagem_url || '';
+                document.getElementById('categoria').value = produto.categoria;
+                document.getElementById('estoque').value = produto.estoque;
+                document.getElementById('destaque').checked = produto.destaque;
                 
-                try {
-                    const { data, error } = await supabase
-                        .from('mensagens')
-                        .select('*')
-                        .order('created_at', { ascending: false });
-                    
-                    if (error) throw error;
-                    
-                    if (data.length === 0) {
-                        messageList.innerHTML = '<p>Nenhuma mensagem recebida.</p>';
-                    } else {
-                        data.forEach(mensagem => {
-                            const messageItem = document.createElement('div');
-                            messageItem.className = 'card';
-                            
-                            const date = new Date(mensagem.created_at);
-                            const formattedDate = date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR');
-                            
-                            messageItem.innerHTML = `
-                                <h3>${mensagem.nome} <small>(${mensagem.email})</small></h3>
-                                <p><strong>Recebido em:</strong> ${formattedDate}</p>
-                                <p><strong>Assunto:</strong> ${mensagem.assunto || 'Não especificado'}</p>
-                                <p>${mensagem.mensagem}</p>
-                                <button class="btn btn-sm btn-danger delete-message" data-id="${mensagem.id}">Excluir</button>
-                            `;
-                            messageList.appendChild(messageItem);
-                            
-                            // Adicionar event listener
-                            messageItem.querySelector('.delete-message').addEventListener('click', function() {
-                                deleteMessage(mensagem.id, mensagem.nome);
-                            });
-                        });
-                    }
-                    
-                    addLog('Mensagens carregadas: ' + (data ? data.length : 0) + ' itens', 'info');
-                } catch (error) {
-                    console.error('Erro ao carregar mensagens:', error);
-                    messageList.innerHTML = `<p style="color: var(--danger)">Erro ao carregar mensagens: ${error.message}</p>`;
-                    addLog('Erro ao carregar mensagens: ' + error.message, 'error');
-                } finally {
-                    messageListLoading.style.display = 'none';
+                if (produto.especificacoes) {
+                    document.getElementById('jsonEditor').value = JSON.stringify(produto.especificacoes, null, 2);
+                } else {
+                    document.getElementById('jsonEditor').value = '';
                 }
-            }
-
-            // Excluir mensagem
-            async function deleteMessage(id, nome) {
-                if (confirm(`Tem certeza que deseja excluir a mensagem de "${nome}"?`)) {
+                
+                // Modificar o botão de submit para atualizar em vez de adicionar
+                const submitBtn = produtoForm.querySelector('button[type="submit"]');
+                submitBtn.textContent = 'Atualizar Produto';
+                submitBtn.classList.remove('btn-success');
+                submitBtn.classList.add('btn-primary');
+                
+                // Adicionar um atributo data-id ao formulário
+                produtoForm.setAttribute('data-id', produto.id);
+                
+                // Rolar para o topo para editar
+                window.scrollTo(0, 0);
+                
+                // Adicionar um botão para cancelar a edição
+                if (!document.getElementById('cancelEdit')) {
+                    const cancelBtn = document.createElement('button');
+                    cancelBtn.id = 'cancelEdit';
+                    cancelBtn.className = 'btn btn-danger';
+                    cancelBtn.style.marginLeft = '10px';
+                    cancelBtn.textContent = 'Cancelar';
+                    cancelBtn.type = 'button';
+                    
+                    cancelBtn.addEventListener('click', function() {
+                        resetForm();
+                    });
+                    
+                    submitBtn.parentNode.insertBefore(cancelBtn, submitBtn.nextSibling);
+                }
+                
+                // Modificar o handler do formulário para atualizar em vez de adicionar
+                produtoForm.onsubmit = async function(e) {
+                    e.preventDefault();
+                    
                     try {
-                        const { error } = await supabase
-                            .from('mensagens')
-                            .delete()
+                        // Validar JSON das especificações
+                        const jsonEditorValue = document.getElementById('jsonEditor').value;
+                        let especificacoes = null;
+                        
+                        if (jsonEditorValue.trim()) {
+                            try {
+                                especificacoes = JSON.parse(jsonEditorValue);
+                            } catch (jsonError) {
+                                throw new Error('Formato JSON inválido para especificações');
+                            }
+                        }
+                        
+                        // Criar objeto do produto atualizado
+                        const produtoAtualizado = {
+                            nome: document.getElementById('nome').value,
+                            descricao: document.getElementById('descricao').value,
+                            descricao_longa: document.getElementById('descricao_longa').value,
+                            preco: parseFloat(document.getElementById('preco').value),
+                            imagem_url: document.getElementById('imagem_url').value,
+                            categoria: document.getElementById('categoria').value,
+                            estoque: parseInt(document.getElementById('estoque').value),
+                            destaque: document.getElementById('destaque').checked,
+                            especificacoes: especificacoes,
+                            ultima_atualizacao: new Date().toISOString()
+                        };
+                        
+                        const id = produtoForm.getAttribute('data-id');
+                        
+                        // Atualizar no Supabase
+                        const { data, error } = await supabase
+                            .from('produtos')
+                            .update(produtoAtualizado)
                             .eq('id', id);
                         
                         if (error) throw error;
                         
-                        // Recarregar lista de mensagens
-                        loadMessages();
+                        // Resetar formulário
+                        resetForm();
                         
-                        addLog('Mensagem excluída: ' + nome, 'success');
-                    } catch (error) {
-                        console.error('Erro ao excluir mensagem:', error);
-                        alert('Erro ao excluir mensagem: ' + error.message);
-                        addLog('Erro ao excluir mensagem: ' + error.message, 'error');
-                    }
-                }
-            }
-
-            // Sistema de abas
-            tabs.forEach(tab => {
-                tab.addEventListener('click', function() {
-                    // Remover classe ativa de todas as abas
-                    tabs.forEach(t => t.classList.remove('active'));
-                    tabContents.forEach(c => c.classList.remove('active'));
-                    
-                    // Adicionar classe ativa na aba clicada
-                    this.classList.add('active');
-                    
-                    // Exibir conteúdo correspondente
-                    const tabName = this.getAttribute('data-tab');
-                    document.getElementById(tabName + 'Tab').classList.add('active');
-                    
-                    addLog('Navegação para a aba: ' + tabName, 'info');
-                });
-            });
-
-            // Inicializar
-            checkSession();
-            
-            // Corrigir problema do Supabase
-            if (typeof supabase === 'undefined') {
-                const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-                console.log("Supabase inicializado via window.supabase");
-                addLog('Supabase inicializado manualmente', 'info');
-            }
-            
-            addLog('Aplicação inicializada', 'info');
-        });
-    </script>
-</body>
-</html>
+                        // Exibir mensagem de sucesso
+                        produto
