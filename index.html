@@ -456,6 +456,29 @@
             const tabContents = document.querySelectorAll('.tab-content');
             const realtimeLogs = document.getElementById('realtime-logs');
 
+            // Adicionar evento de clique às tabs
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // Remover classe active de todas as tabs
+                    tabs.forEach(t => t.classList.remove('active'));
+                    // Adicionar classe active à tab clicada
+                    this.classList.add('active');
+                    
+                    // Esconder todos os conteúdos de tab
+                    tabContents.forEach(content => content.classList.remove('active'));
+                    // Mostrar o conteúdo da tab selecionada
+                    const tabId = this.getAttribute('data-tab') + 'Tab';
+                    document.getElementById(tabId).classList.add('active');
+                    
+                    // Carregar dados específicos da tab, se necessário
+                    if (tabId === 'produtosTab') {
+                        loadProducts();
+                    } else if (tabId === 'mensagensTab') {
+                        loadMessages();
+                    }
+                });
+            });
+
             // Função para adicionar logs ao monitor
             function addLog(message, type = 'info') {
                 const now = new Date();
@@ -596,8 +619,32 @@
                 }
             });
 
-            // Adicionar produto
-            produtoForm.addEventListener('submit', async function(e) {
+            // Função para resetar o formulário para o estado inicial
+            function resetForm() {
+                produtoForm.reset();
+                document.getElementById('jsonEditor').value = '';
+                
+                // Restaurar botão de submit
+                const submitBtn = produtoForm.querySelector('button[type="submit"]');
+                submitBtn.textContent = 'Adicionar Produto';
+                submitBtn.classList.remove('btn-primary');
+                submitBtn.classList.add('btn-success');
+                
+                // Remover atributo data-id
+                produtoForm.removeAttribute('data-id');
+                
+                // Remover botão cancelar
+                const cancelBtn = document.getElementById('cancelEdit');
+                if (cancelBtn) {
+                    cancelBtn.remove();
+                }
+                
+                // Restaurar handler original
+                produtoForm.onsubmit = originalSubmitHandler;
+            }
+
+            // Adicionar produto - handler original
+            const originalSubmitHandler = async function(e) {
                 e.preventDefault();
                 
                 try {
@@ -659,64 +706,36 @@
                     
                     addLog('Erro ao adicionar produto: ' + error.message, 'error');
                 }
-            });
+            };
 
-            // Carregar produtos
-            async function loadProducts() {
-                productListLoading.style.display = 'block';
-                productList.innerHTML = '';
-                
-                try {
-                    const { data, error } = await supabase
-                        .from('produtos')
-                        .select('*')
-                        .order('data_criacao', { ascending: false });
-                    
-                    if (error) throw error;
-                    
-                    if (data.length === 0) {
-                        productList.innerHTML = '<p>Nenhum produto cadastrado.</p>';
-                    } else {
-                        data.forEach(produto => {
-                            const productItem = document.createElement('div');
-                            productItem.className = 'product-item';
-                            productItem.innerHTML = `
-                                <div class="product-info">
-                                    <div class="product-name">${produto.nome}</div>
-                                    <div class="product-details">
-                                        R$ ${produto.preco.toFixed(2)} | Estoque: ${produto.estoque} | 
-                                        ${produto.destaque ? '<span style="color: var(--success)">Destaque</span>' : ''}
-                                    </div>
-                                </div>
-                                <div class="product-actions">
-                                    <button class="btn btn-sm btn-primary edit-product" data-id="${produto.id}">Editar</button>
-                                    <button class="btn btn-sm btn-danger delete-product" data-id="${produto.id}">Excluir</button>
-                                </div>
-                            `;
-                            productList.appendChild(productItem);
-                            
-                            // Adicionar event listeners
-                            productItem.querySelector('.delete-product').addEventListener('click', function() {
-                                deleteProduct(produto.id, produto.nome);
-                            });
-                            
-                            productItem.querySelector('.edit-product').addEventListener('click', function() {
-                                editProduct(produto);
-                            });
-                        });
+            // Configurar handler inicial do formulário
+            produtoForm.onsubmit = originalSubmitHandler;
+
+            // Excluir produto
+            async function deleteProduct(id, nome) {
+                if (confirm(`Tem certeza que deseja excluir o produto "${nome}"?`)) {
+                    try {
+                        const { error } = await supabase
+                            .from('produtos')
+                            .delete()
+                            .eq('id', id);
+                        
+                        if (error) throw error;
+                        
+                        // Recarregar lista de produtos
+                        loadProducts();
+                        
+                        addLog('Produto excluído: ' + nome, 'success');
+                    } catch (error) {
+                        console.error('Erro ao excluir produto:', error);
+                        alert('Erro ao excluir produto: ' + error.message);
+                        
+                        addLog('Erro ao excluir produto: ' + error.message, 'error');
                     }
-                    
-                    addLog('Produtos carregados: ' + (data ? data.length : 0) + ' itens', 'info');
-                } catch (error) {
-                    console.error('Erro ao carregar produtos:', error);
-                    productList.innerHTML = `<p style="color: var(--danger)">Erro ao carregar produtos: ${error.message}</p>`;
-                    addLog('Erro ao carregar produtos: ' + error.message, 'error');
-                } finally {
-                    productListLoading.style.display = 'none';
                 }
             }
 
-            // Função para editar produto
+            // Editar produto
             function editProduct(produto) {
                 // Preencher o formulário com os dados do produto
                 document.getElementById('nome').value = produto.nome;
@@ -796,15 +815,4 @@
                         const id = produtoForm.getAttribute('data-id');
                         
                         // Atualizar no Supabase
-                        const { data, error } = await supabase
-                            .from('produtos')
-                            .update(produtoAtualizado)
-                            .eq('id', id);
-                        
-                        if (error) throw error;
-                        
-                        // Resetar formulário
-                        resetForm();
-                        
-                        // Exibir mensagem de sucesso
-                        produto
+                        const { data, error } =
