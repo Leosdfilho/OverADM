@@ -466,6 +466,11 @@
             // Verificar se há uma sessão ativa ao carregar a página
             checkSession();
 
+            // Event Listeners
+            loginForm.addEventListener('submit', handleLogin);
+            logoutBtn.addEventListener('click', handleLogout);
+            produtoForm.addEventListener('submit', handleProductSubmit);
+
             // Adicionar evento de clique às tabs
             tabs.forEach(tab => {
                 tab.addEventListener('click', function() {
@@ -492,6 +497,9 @@
             // Função para validar entrada JSON
             function validateJsonInput(jsonStr) {
                 try {
+                    if (!jsonStr.trim()) {
+                        return { valid: true, data: {} };
+                    }
                     const parsed = JSON.parse(jsonStr);
                     return { valid: true, data: parsed };
                 } catch (e) {
@@ -535,4 +543,271 @@
                     addLog('Verificação de administrador: acesso concedido', 'success');
                     return true;
                 } catch (err) {
-                    console.error("
+                    console.error("Erro ao verificar permissões:", err);
+                    addLog(`Erro na verificação: ${err.message}`, 'error');
+                    return false;
+                }
+            }
+
+            // Verificar sessão atual
+            async function checkSession() {
+                const { data: { session } } = await supabase.auth.getSession();
+                
+                if (session) {
+                    const email = session.user.email;
+                    addLog(`Usuário autenticado: ${email}`, 'info');
+                    
+                    const isAdmin = await checkAdminAccess(email);
+                    if (isAdmin) {
+                        showAdminPanel(email);
+                        loadProducts();
+                    } else {
+                        showAlert(loginAlert, 'Você não tem permissão de administrador.', 'danger');
+                        await supabase.auth.signOut();
+                    }
+                } else {
+                    addLog('Sessão não encontrada. Login necessário.', 'info');
+                }
+            }
+
+            // Função de login
+            async function handleLogin(e) {
+                e.preventDefault();
+                
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                
+                try {
+                    addLog(`Tentativa de login: ${email}`, 'info');
+                    
+                    const { data, error } = await supabase.auth.signInWithPassword({
+                        email,
+                        password
+                    });
+                    
+                    if (error) {
+                        console.error("Erro de login:", error);
+                        showAlert(loginAlert, 'Erro no login: ' + error.message, 'danger');
+                        addLog(`Falha no login: ${error.message}`, 'error');
+                        return;
+                    }
+                    
+                    addLog(`Login bem-sucedido: ${email}`, 'success');
+                    
+                    // Verificar se o usuário é um administrador
+                    const isAdmin = await checkAdminAccess(email);
+                    if (isAdmin) {
+                        showAdminPanel(email);
+                        loadProducts();
+                    } else {
+                        showAlert(loginAlert, 'Você não tem permissão de administrador.', 'danger');
+                        await supabase.auth.signOut();
+                        addLog('Acesso negado: usuário não é administrador', 'error');
+                    }
+                } catch (err) {
+                    console.error("Erro ao processar login:", err);
+                    showAlert(loginAlert, 'Erro ao processar login', 'danger');
+                    addLog(`Erro no processo de login: ${err.message}`, 'error');
+                }
+            }
+
+            // Função de logout
+            async function handleLogout() {
+                try {
+                    addLog('Iniciando logout', 'info');
+                    await supabase.auth.signOut();
+                    addLog('Logout concluído com sucesso', 'success');
+                    
+                    // Redefinir formulário de produto
+                    produtoForm.reset();
+                    resetProductForm();
+                    
+                    // Mostrar tela de login
+                    loginSection.style.display = 'block';
+                    adminSection.style.display = 'none';
+                    userEmail.textContent = '';
+                    logoutBtn.style.display = 'none';
+                } catch (err) {
+                    console.error("Erro ao fazer logout:", err);
+                    addLog(`Erro ao fazer logout: ${err.message}`, 'error');
+                }
+            }
+
+            // Mostrar painel de administração
+            function showAdminPanel(email) {
+                loginSection.style.display = 'none';
+                adminSection.style.display = 'block';
+                userEmail.textContent = email;
+                logoutBtn.style.display = 'inline-block';
+                addLog('Painel de administração carregado', 'info');
+            }
+
+            // Mostrar alertas
+            function showAlert(alertEl, message, type) {
+                alertEl.className = `alert alert-${type}`;
+                alertEl.textContent = message;
+                alertEl.style.display = 'block';
+                
+                // Esconder alerta após 5 segundos
+                setTimeout(() => {
+                    alertEl.style.display = 'none';
+                }, 5000);
+            }
+
+            // Carregar produtos
+            async function loadProducts() {
+                try {
+                    productListLoading.style.display = 'block';
+                    productList.innerHTML = '';
+                    addLog('Carregando lista de produtos...', 'info');
+                    
+                    const { data, error } = await supabase
+                        .from('produtos')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+                    
+                    if (error) {
+                        console.error("Erro ao carregar produtos:", error);
+                        addLog(`Erro ao carregar produtos: ${error.message}`, 'error');
+                        return;
+                    }
+                    
+                    productListLoading.style.display = 'none';
+                    
+                    if (data.length === 0) {
+                        productList.innerHTML = '<p>Nenhum produto cadastrado.</p>';
+                        return;
+                    }
+                    
+                    addLog(`${data.length} produtos carregados com sucesso`, 'success');
+                    
+                    data.forEach(product => {
+                        const productItem = document.createElement('div');
+                        productItem.className = 'product-item';
+                        productItem.innerHTML = `
+                            <div class="product-info">
+                                <h3 class="product-name">${product.nome}</h3>
+                                <p class="product-details">R$ ${product.preco.toFixed(2)} | Estoque: ${product.estoque} | Categoria: ${product.categoria}</p>
+                            </div>
+                            <div class="product-actions">
+                                <button class="btn btn-primary btn-sm edit-product" data-id="${product.id}">Editar</button>
+                                <button class="btn btn-danger btn-sm delete-product" data-id="${product.id}">Excluir</button>
+                            </div>
+                        `;
+                        productList.appendChild(productItem);
+                        
+                        // Adicionar eventos aos botões
+                        productItem.querySelector('.edit-product').addEventListener('click', () => editProduct(product));
+                        productItem.querySelector('.delete-product').addEventListener('click', () => deleteProduct(product.id));
+                    });
+                } catch (err) {
+                    console.error("Erro ao processar produtos:", err);
+                    addLog(`Erro ao processar produtos: ${err.message}`, 'error');
+                    productListLoading.style.display = 'none';
+                }
+            }
+
+            // Carregar mensagens
+            async function loadMessages() {
+                try {
+                    messageListLoading.style.display = 'block';
+                    messageList.innerHTML = '';
+                    addLog('Carregando mensagens de contato...', 'info');
+                    
+                    const { data, error } = await supabase
+                        .from('mensagens')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+                    
+                    if (error) {
+                        console.error("Erro ao carregar mensagens:", error);
+                        addLog(`Erro ao carregar mensagens: ${error.message}`, 'error');
+                        return;
+                    }
+                    
+                    messageListLoading.style.display = 'none';
+                    
+                    if (data.length === 0) {
+                        messageList.innerHTML = '<p>Nenhuma mensagem encontrada.</p>';
+                        return;
+                    }
+                    
+                    addLog(`${data.length} mensagens carregadas com sucesso`, 'success');
+                    
+                    data.forEach(message => {
+                        const messageCard = document.createElement('div');
+                        messageCard.className = 'card';
+                        const date = new Date(message.created_at).toLocaleString();
+                        messageCard.innerHTML = `
+                            <h3>${message.nome} (${message.email})</h3>
+                            <p><strong>Data:</strong> ${date}</p>
+                            <p><strong>Assunto:</strong> ${message.assunto}</p>
+                            <p><strong>Mensagem:</strong></p>
+                            <p>${message.mensagem}</p>
+                        `;
+                        messageList.appendChild(messageCard);
+                    });
+                } catch (err) {
+                    console.error("Erro ao processar mensagens:", err);
+                    addLog(`Erro ao processar mensagens: ${err.message}`, 'error');
+                    messageListLoading.style.display = 'none';
+                }
+            }
+
+            // Adicionar/Editar produto
+            async function handleProductSubmit(e) {
+                e.preventDefault();
+                
+                // Validar o formato JSON (se houver)
+                const jsonStr = document.getElementById('jsonEditor').value;
+                const jsonValidation = validateJsonInput(jsonStr);
+                
+                if (!jsonValidation.valid) {
+                    showAlert(produtoAlert, `Erro no formato JSON: ${jsonValidation.error}`, 'danger');
+                    addLog(`Validação JSON falhou: ${jsonValidation.error}`, 'error');
+                    return;
+                }
+                
+                // Coletar dados do formulário
+                const productData = {
+                    nome: document.getElementById('nome').value,
+                    descricao: document.getElementById('descricao').value,
+                    descricao_longa: document.getElementById('descricao_longa').value,
+                    preco: parseFloat(document.getElementById('preco').value),
+                    imagem_url: document.getElementById('imagem_url').value,
+                    categoria: document.getElementById('categoria').value,
+                    estoque: parseInt(document.getElementById('estoque').value),
+                    destaque: document.getElementById('destaque').checked,
+                    especificacoes: jsonValidation.data
+                };
+                
+                try {
+                    let result;
+                    
+                    if (currentEditingProductId) {
+                        // Modo edição
+                        addLog(`Atualizando produto ID: ${currentEditingProductId}`, 'info');
+                        result = await supabase
+                            .from('produtos')
+                            .update(productData)
+                            .eq('id', currentEditingProductId);
+                            
+                        if (result.error) {
+                            throw result.error;
+                        }
+                        
+                        addLog(`Produto atualizado com sucesso: ${productData.nome}`, 'success');
+                        showAlert(produtoAlert, 'Produto atualizado com sucesso!', 'success');
+                    } else {
+                        // Modo adição
+                        addLog(`Adicionando novo produto: ${productData.nome}`, 'info');
+                        result = await supabase
+                            .from('produtos')
+                            .insert([productData]);
+                            
+                        if (result.error) {
+                            throw result.error;
+                        }
+                        
+                        addLog(`Produto adicionado com sucesso: ${productData.nome}`, 'success');
+                        showAlert(produtoAlert, 'Produto adicionado com sucesso!',
