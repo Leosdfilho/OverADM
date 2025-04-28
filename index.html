@@ -456,6 +456,12 @@
             const tabContents = document.querySelectorAll('.tab-content');
             const realtimeLogs = document.getElementById('realtime-logs');
 
+            // Inicializar o monitor de logs
+            addLog('Sistema inicializado', 'info');
+
+            // Verificar se há uma sessão ativa ao carregar a página
+            checkSession();
+
             // Adicionar evento de clique às tabs
             tabs.forEach(tab => {
                 tab.addEventListener('click', function() {
@@ -493,13 +499,21 @@
             // Verificar se o usuário é administrador
             async function checkAdminAccess(email) {
                 try {
+                    addLog(`Verificando permissões para: ${email}`, 'info');
+                    
                     const { data, error } = await supabase
                         .from('administrators')
                         .select('*')
                         .eq('email', email)
                         .single();
-                        
-                    if (error || !data) {
+                    
+                    if (error) {
+                        console.error("Erro ao verificar permissões:", error);
+                        addLog(`Erro na verificação: ${error.message}`, 'error');
+                        return false;
+                    }
+                    
+                    if (!data) {
                         addLog('Acesso negado: usuário não é administrador', 'error');
                         return false;
                     }
@@ -516,9 +530,20 @@
             // Verificar se o usuário está logado
             async function checkSession() {
                 try {
+                    addLog('Verificando sessão...', 'info');
+                    
                     const { data, error } = await supabase.auth.getSession();
                     
+                    if (error) {
+                        console.error("Erro ao verificar sessão:", error);
+                        addLog(`Erro ao verificar sessão: ${error.message}`, 'error');
+                        return;
+                    }
+                    
                     if (data && data.session) {
+                        // Usuário está logado
+                        addLog(`Sessão existente detectada para: ${data.session.user.email}`, 'info');
+                        
                         // Verificar se o usuário é administrador
                         const isAdmin = await checkAdminAccess(data.session.user.email);
                         
@@ -548,6 +573,7 @@
                         addLog('Sessão iniciada como ' + data.session.user.email, 'success');
                     } else {
                         // Usuário não está logado
+                        addLog('Nenhuma sessão ativa, exibindo tela de login', 'info');
                         loginSection.style.display = 'block';
                         adminSection.style.display = 'none';
                         logoutBtn.style.display = 'none';
@@ -565,13 +591,24 @@
                 const email = document.getElementById('email').value;
                 const password = document.getElementById('password').value;
                 
+                addLog(`Tentativa de login para: ${email}`, 'info');
+                
                 try {
+                    loginAlert.style.display = 'none';
+                    
                     const { data, error } = await supabase.auth.signInWithPassword({
                         email: email,
                         password: password
                     });
                     
-                    if (error) throw error;
+                    if (error) {
+                        throw error;
+                    }
+                    
+                    addLog('Autenticação bem-sucedida, verificando permissões...', 'info');
+                    
+                    // Verificação adicional para debugar
+                    console.log("Dados da sessão:", data);
                     
                     // Verificar se é administrador antes de prosseguir
                     const isAdmin = await checkAdminAccess(email);
@@ -589,13 +626,17 @@
                     loginAlert.textContent = 'Login realizado com sucesso!';
                     loginAlert.style.display = 'block';
                     
-                    // Atualizar UI
-                    setTimeout(() => {
-                        checkSession();
-                        loginAlert.style.display = 'none';
-                    }, 1000);
-                    
                     addLog('Login realizado com sucesso como ' + email, 'success');
+                    
+                    // Atualizar UI imediatamente para melhor feedback
+                    loginSection.style.display = 'none';
+                    adminSection.style.display = 'block';
+                    userEmail.textContent = email;
+                    logoutBtn.style.display = 'inline-block';
+                    
+                    // Carregar dados
+                    loadProducts();
+                    loadMessages();
                 } catch (error) {
                     console.error('Erro de login:', error);
                     loginAlert.className = 'alert alert-danger';
@@ -608,16 +649,106 @@
 
             // Logout
             logoutBtn.addEventListener('click', async function() {
-                const { error } = await supabase.auth.signOut();
-                
-                if (error) {
+                try {
+                    addLog('Realizando logout...', 'info');
+                    const { error } = await supabase.auth.signOut();
+                    
+                    if (error) {
+                        throw error;
+                    }
+                    
+                    addLog('Logout realizado com sucesso', 'success');
+                    
+                    // Atualizar UI
+                    loginSection.style.display = 'block';
+                    adminSection.style.display = 'none';
+                    logoutBtn.style.display = 'none';
+                    userEmail.textContent = '';
+                } catch (error) {
                     console.error('Erro ao fazer logout:', error);
                     addLog('Erro ao fazer logout: ' + error.message, 'error');
-                } else {
-                    addLog('Logout realizado com sucesso', 'info');
-                    checkSession();
+                    alert('Erro ao fazer logout: ' + error.message);
                 }
             });
+
+            // Função para carregar mensagens de contato
+            async function loadMessages() {
+                messageListLoading.style.display = 'block';
+                messageList.innerHTML = '';
+                
+                try {
+                    addLog('Carregando mensagens de contato...', 'info');
+                    
+                    const { data, error } = await supabase
+                        .from('contatos')
+                        .select('*')
+                        .order('data_criacao', { ascending: false });
+                    
+                    if (error) throw error;
+                    
+                    if (!data || data.length === 0) {
+                        messageList.innerHTML = '<p>Nenhuma mensagem encontrada.</p>';
+                        addLog('Nenhuma mensagem encontrada', 'info');
+                    } else {
+                        data.forEach(mensagem => {
+                            const messageItem = document.createElement('div');
+                            messageItem.className = 'product-item';
+                            messageItem.innerHTML = `
+                                <div class="product-info">
+                                    <div class="product-name">${mensagem.nome} - ${mensagem.email}</div>
+                                    <div class="product-details">
+                                        <strong>Assunto:</strong> ${mensagem.assunto}<br>
+                                        <strong>Mensagem:</strong> ${mensagem.mensagem}<br>
+                                        <strong>Data:</strong> ${new Date(mensagem.data_criacao).toLocaleString()}
+                                    </div>
+                                </div>
+                                <div class="product-actions">
+                                    <button class="btn btn-sm btn-danger delete-message" data-id="${mensagem.id}">Excluir</button>
+                                </div>
+                            `;
+                            messageList.appendChild(messageItem);
+                            
+                            // Adicionar event listener para excluir mensagem
+                            messageItem.querySelector('.delete-message').addEventListener('click', function() {
+                                deleteMessage(mensagem.id, mensagem.nome);
+                            });
+                        });
+                        
+                        addLog(`${data.length} mensagens carregadas`, 'success');
+                    }
+                } catch (error) {
+                    console.error('Erro ao carregar mensagens:', error);
+                    messageList.innerHTML = `<p style="color: var(--danger)">Erro ao carregar mensagens: ${error.message}</p>`;
+                    addLog('Erro ao carregar mensagens: ' + error.message, 'error');
+                } finally {
+                    messageListLoading.style.display = 'none';
+                }
+            }
+
+            // Função para excluir mensagem
+            async function deleteMessage(id, nome) {
+                if (confirm(`Tem certeza que deseja excluir a mensagem de "${nome}"?`)) {
+                    try {
+                        addLog(`Excluindo mensagem de ${nome}...`, 'info');
+                        
+                        const { error } = await supabase
+                            .from('contatos')
+                            .delete()
+                            .eq('id', id);
+                        
+                        if (error) throw error;
+                        
+                        // Recarregar mensagens
+                        loadMessages();
+                        
+                        addLog(`Mensagem de ${nome} excluída com sucesso`, 'success');
+                    } catch (error) {
+                        console.error('Erro ao excluir mensagem:', error);
+                        alert('Erro ao excluir mensagem: ' + error.message);
+                        addLog('Erro ao excluir mensagem: ' + error.message, 'error');
+                    }
+                }
+            }
 
             // Função para resetar o formulário para o estado inicial
             function resetForm() {
@@ -641,6 +772,8 @@
                 
                 // Restaurar handler original
                 produtoForm.onsubmit = originalSubmitHandler;
+                
+                addLog('Formulário resetado', 'info');
             }
 
             // Adicionar produto - handler original
@@ -648,6 +781,8 @@
                 e.preventDefault();
                 
                 try {
+                    addLog('Adicionando novo produto...', 'info');
+                    
                     // Validar JSON das especificações
                     const jsonEditorValue = document.getElementById('jsonEditor').value;
                     let especificacoes = null;
@@ -670,7 +805,8 @@
                         categoria: document.getElementById('categoria').value,
                         estoque: parseInt(document.getElementById('estoque').value),
                         destaque: document.getElementById('destaque').checked,
-                        especificacoes: especificacoes
+                        especificacoes: especificacoes,
+                        data_criacao: new Date().toISOString()
                     };
                     
                     // Enviar para o Supabase
@@ -681,138 +817,4 @@
                     if (error) throw error;
                     
                     // Limpar formulário
-                    produtoForm.reset();
-                    document.getElementById('jsonEditor').value = '';
-                    
-                    // Exibir mensagem de sucesso
-                    produtoAlert.className = 'alert alert-success';
-                    produtoAlert.textContent = 'Produto adicionado com sucesso!';
-                    produtoAlert.style.display = 'block';
-                    
-                    // Recarregar lista de produtos
-                    loadProducts();
-                    
-                    addLog('Produto adicionado: ' + produto.nome, 'success');
-                    
-                    // Esconder mensagem após 3 segundos
-                    setTimeout(() => {
-                        produtoAlert.style.display = 'none';
-                    }, 3000);
-                } catch (error) {
-                    console.error('Erro ao adicionar produto:', error);
-                    produtoAlert.className = 'alert alert-danger';
-                    produtoAlert.textContent = 'Erro ao adicionar produto: ' + error.message;
-                    produtoAlert.style.display = 'block';
-                    
-                    addLog('Erro ao adicionar produto: ' + error.message, 'error');
-                }
-            };
-
-            // Configurar handler inicial do formulário
-            produtoForm.onsubmit = originalSubmitHandler;
-
-            // Excluir produto
-            async function deleteProduct(id, nome) {
-                if (confirm(`Tem certeza que deseja excluir o produto "${nome}"?`)) {
-                    try {
-                        const { error } = await supabase
-                            .from('produtos')
-                            .delete()
-                            .eq('id', id);
-                        
-                        if (error) throw error;
-                        
-                        // Recarregar lista de produtos
-                        loadProducts();
-                        
-                        addLog('Produto excluído: ' + nome, 'success');
-                    } catch (error) {
-                        console.error('Erro ao excluir produto:', error);
-                        alert('Erro ao excluir produto: ' + error.message);
-                        
-                        addLog('Erro ao excluir produto: ' + error.message, 'error');
-                    }
-                }
-            }
-
-            // Editar produto
-            function editProduct(produto) {
-                // Preencher o formulário com os dados do produto
-                document.getElementById('nome').value = produto.nome;
-                document.getElementById('descricao').value = produto.descricao;
-                document.getElementById('descricao_longa').value = produto.descricao_longa || '';
-                document.getElementById('preco').value = produto.preco;
-                document.getElementById('imagem_url').value = produto.imagem_url || '';
-                document.getElementById('categoria').value = produto.categoria;
-                document.getElementById('estoque').value = produto.estoque;
-                document.getElementById('destaque').checked = produto.destaque;
-                
-                if (produto.especificacoes) {
-                    document.getElementById('jsonEditor').value = JSON.stringify(produto.especificacoes, null, 2);
-                } else {
-                    document.getElementById('jsonEditor').value = '';
-                }
-                
-                // Modificar o botão de submit para atualizar em vez de adicionar
-                const submitBtn = produtoForm.querySelector('button[type="submit"]');
-                submitBtn.textContent = 'Atualizar Produto';
-                submitBtn.classList.remove('btn-success');
-                submitBtn.classList.add('btn-primary');
-                
-                // Adicionar um atributo data-id ao formulário
-                produtoForm.setAttribute('data-id', produto.id);
-                
-                // Rolar para o topo para editar
-                window.scrollTo(0, 0);
-                
-                // Adicionar um botão para cancelar a edição
-                if (!document.getElementById('cancelEdit')) {
-                    const cancelBtn = document.createElement('button');
-                    cancelBtn.id = 'cancelEdit';
-                    cancelBtn.className = 'btn btn-danger';
-                    cancelBtn.style.marginLeft = '10px';
-                    cancelBtn.textContent = 'Cancelar';
-                    cancelBtn.type = 'button';
-                    
-                    cancelBtn.addEventListener('click', function() {
-                        resetForm();
-                    });
-                    
-                    submitBtn.parentNode.insertBefore(cancelBtn, submitBtn.nextSibling);
-                }
-                
-                // Modificar o handler do formulário para atualizar em vez de adicionar
-                produtoForm.onsubmit = async function(e) {
-                    e.preventDefault();
-                    
-                    try {
-                        // Validar JSON das especificações
-                        const jsonEditorValue = document.getElementById('jsonEditor').value;
-                        let especificacoes = null;
-                        
-                        if (jsonEditorValue.trim()) {
-                            try {
-                                especificacoes = JSON.parse(jsonEditorValue);
-                            } catch (jsonError) {
-                                throw new Error('Formato JSON inválido para especificações');
-                            }
-                        }
-                        
-                        // Criar objeto do produto atualizado
-                        const produtoAtualizado = {
-                            nome: document.getElementById('nome').value,
-                            descricao: document.getElementById('descricao').value,
-                            descricao_longa: document.getElementById('descricao_longa').value,
-                            preco: parseFloat(document.getElementById('preco').value),
-                            imagem_url: document.getElementById('imagem_url').value,
-                            categoria: document.getElementById('categoria').value,
-                            estoque: parseInt(document.getElementById('estoque').value),
-                            destaque: document.getElementById('destaque').checked,
-                            especificacoes: especificacoes,
-                            ultima_atualizacao: new Date().toISOString()
-                        };
-                        
-                        const id = produtoForm.getAttribute('data-id');
-                        
-                        // Atualizar no Supabase
-                        const { data, error } =
+                    produtoForm.reset
